@@ -163,8 +163,8 @@ void ModulePackage::createDependencies(Solvable *solvable) const
     Pool * pool = dnf_sack_get_pool(moduleSack);
 
     for (const auto &dependency : getModuleDependencies()) {
-        for (const auto &requires : dependency.getRequires()) {
-            for (const auto &singleRequires : requires) {
+        for (const auto &dep_requires : dependency.getRequires()) {
+            for (const auto &singleRequires : dep_requires) {
                 auto moduleName = singleRequires.first;
                 std::vector<std::string> requiresStream;
                 for (const auto &moduleStream : singleRequires.second) {
@@ -192,7 +192,7 @@ void ModulePackage::createDependencies(Solvable *solvable) const
                     ss << "(";
                     ss << std::accumulate(std::next(requiresStream.begin()),
                                             requiresStream.end(), requiresStream[0],
-                                            [](std::string & a, std::string & b)
+                                            [](const std::string & a, const std::string & b)
                                             { return a + " or " + b; });
                     ss << ")";
                     depId = pool_parserpmrichdep(pool, ss.str().c_str());

@@ -51,7 +51,6 @@ endif()
 
 
 # build dependencies
-find_package(Gpgme REQUIRED)
 find_package(LibSolv 0.7.21 REQUIRED COMPONENTS ext)
 
 
@@ -62,7 +61,7 @@ include_directories(${GLIB_INCLUDE_DIRS})
 pkg_check_modules(JSONC REQUIRED json-c)
 include_directories(${JSONC_INCLUDE_DIRS})
 pkg_check_modules(LIBMODULEMD REQUIRED modulemd-2.0>=2.11.2)
-pkg_check_modules(REPO REQUIRED librepo>=1.13.0)
+pkg_check_modules(REPO REQUIRED librepo>=1.15.0)
 include_directories(${REPO_INCLUDE_DIRS})
 link_directories(${REPO_LIBRARY_DIRS})
 pkg_check_modules(RPM REQUIRED rpm>=4.15.0)
@@ -131,9 +130,6 @@ add_definitions(-DLIBDNF_UNSTABLE_API)
 add_definitions(-DGETTEXT_DOMAIN=\\"libdnf\\")
 add_definitions(-DG_LOG_DOMAIN=\\"libdnf\\")
 
-# gpgme: LargeFile Support is required on 32bit architectures
-add_definitions(-D_FILE_OFFSET_BITS=64)
-
 # tests
 add_definitions(-DTESTDATADIR=\\"${CMAKE_SOURCE_DIR}/data/tests\\")
 
@@ -147,6 +143,10 @@ if(ENABLE_SOLV_URPMREORDER)
     add_definitions(-DLIBSOLV_FLAG_URPMREORDER=1)
 endif()
 
+# If defined, libsolv adds the prefix "dep_" to solvable dependencies.
+# As a result, `requires` is renamed to `dep_requires`.
+# Needed for C++20. `requires` is a keyword in C++20.
+add_definitions(-DLIBSOLV_SOLVABLE_PREPEND_DEP)
 
 if(WITH_SANITIZERS)
     message(WARNING "Building with sanitizers enabled!")
