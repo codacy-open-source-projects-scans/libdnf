@@ -4,7 +4,7 @@
 %global dnf_conflict 4.11.0
 %global swig_version 3.0.12
 %global libdnf_major_version 0
-%global libdnf_minor_version 71
+%global libdnf_minor_version 72
 %global libdnf_micro_version 0
 
 %define __cmake_in_source_build 1
@@ -289,6 +289,7 @@ popd
 
 %if %{with python3}
 %files -n python3-%{name}
+%{python3_sitearch}/%{name}-*.dist-info
 %{python3_sitearch}/%{name}/
 %endif
 

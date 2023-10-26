@@ -20,6 +20,35 @@
 ######################
 
 ====================
+0.72.0 Release Notes
+====================
+
+- New features:
+  - conf: Add limited shell-style variable expansion (RhBug:1789346)
+  - conf: Add support for $releasever_major, $releasever_minor (RhBug:1789346)
+  - repo: Don't download the repository if the local cache is up to date
+
+- Bug fixes:
+  - Avoid reinstalling installonly packages marked for ERASE (RhBug:2163474)
+  - transaction: Save the reason for installing (RhBug:1733274)
+  - hawkey.subject: get_best_selectors only obsoleters of latest (RhBug:2183279,2176263)
+
+- Others:
+  - Allow DNF to be removed by DNF 5 (RhBug:2221907)
+  - Include dist-info for python3-libdnf
+  - bindings: Load all modules with RTLD_GLOBAL
+  - Update translations
+
+Bugs fixed in 0.72.0:
+
+* :rhbug:`2163474`
+* :rhbug:`1733274`
+* :rhbug:`2183279`
+* :rhbug:`2176263`
+* :rhbug:`1789346`
+* :rhbug:`2221907`
+
+====================
 0.71.0 Release Notes
 ====================
 
