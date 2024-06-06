@@ -873,6 +873,9 @@ void Repo::Impl::addCountmeFlag(LrHandle *handle) {
      * This is to align the time window with an absolute point in time rather
      * than the last counting event (which could facilitate tracking across
      * multiple such events).
+     *
+     * In the below comments, the window's current position will be referred to
+     * as "this window" for brevity.
      */
     auto logger(Log::getLogger());
 
@@ -897,7 +900,7 @@ void Repo::Impl::addCountmeFlag(LrHandle *handle) {
     // Load the cookie
     std::string fname = getPersistdir() + "/" + COUNTME_COOKIE;
     int ver = COUNTME_VERSION;      // file format version (for future use)
-    time_t epoch = 0;               // position of first-ever counted window
+    time_t epoch = 0;               // position of first observed window
     time_t win = COUNTME_OFFSET;    // position of last counted window
     int budget = -1;                // budget for this window (-1 = generate)
     std::ifstream(fname) >> ver >> epoch >> win >> budget;
@@ -923,8 +926,15 @@ void Repo::Impl::addCountmeFlag(LrHandle *handle) {
 
         // Compute the position of this window
         win = now - (delta % COUNTME_WINDOW);
+
+        // Compute the epoch from this system's epoch or, if unknown, declare
+        // this window as the epoch (unless stored in the cookie previously).
+        time_t sysepoch = getSystemEpoch();
+        if (sysepoch)
+            epoch = sysepoch - ((sysepoch - COUNTME_OFFSET) % COUNTME_WINDOW);
         if (!epoch)
             epoch = win;
+
         // Window step (0 at epoch)
         int step = (win - epoch) / COUNTME_WINDOW;
 
@@ -933,7 +943,7 @@ void Repo::Impl::addCountmeFlag(LrHandle *handle) {
         for (i = 0; i < COUNTME_BUCKETS.size(); ++i)
             if (step < COUNTME_BUCKETS[i])
                 break;
-        int bucket = i + 1;  // Buckets are indexed from 1
+        int bucket = i + 1;  // Buckets are numbered from 1
 
         // Set the flag
         std::string flag = "countme=" + std::to_string(bucket);
@@ -1216,6 +1226,31 @@ std::string Repo::Impl::getPersistdir() const
                                     result, errTxt));
     }
     return result;
+}
+
+/* Returns this system's installation time ("epoch") as a UNIX timestamp.
+ *
+ * Uses the machine-id(5) file's mtime as a good-enough source of truth.  This
+ * file is typically tied to the system's installation or first boot where it's
+ * populated by an installer tool or init system, respectively, and is never
+ * changed afterwards.
+ *
+ * Some systems, such as containers that don't run an init system, may have the
+ * file missing, empty or uninitialized, in which case this function returns 0.
+ */
+time_t Repo::Impl::getSystemEpoch() const
+{
+    std::string filename = "/etc/machine-id";
+    std::string id;
+    struct stat st;
+
+    if (stat(filename.c_str(), &st) != 0 || !st.st_size)
+        return 0;
+    std::ifstream(filename) >> id;
+    if (id == "uninitialized")
+        return 0;
+
+    return st.st_mtime;
 }
 
 int Repo::Impl::getAge() const
