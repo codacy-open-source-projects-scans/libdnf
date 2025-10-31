@@ -1,0 +1,5 @@
+set(GOAL_SOURCES
+    ${GOAL_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/Goal.cpp
+    PARENT_SCOPE
+)
