@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #ifndef LIBDNF_TRANSACTION_TYPES_HPP
@@ -54,6 +54,12 @@ enum class TransactionItemAction : int {
     REINSTALL = 9,     // a package that was reinstalled with the identical version
     REINSTALLED = 10,  // a package that was reinstalled with the identical version (old repo, for example)
     REASON_CHANGE = 11 // a package was kept on the system but it's reason has changed
+};
+
+enum class TransactionPersistence : int {
+    UNKNOWN = 0,
+    PERSIST = 1,
+    TRANSIENT = 2,
 };
 
 } // namespace libdnf

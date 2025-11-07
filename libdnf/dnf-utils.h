@@ -15,8 +15,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #ifndef __DNF_UTILS_H
@@ -53,6 +53,9 @@ extern "C" {
 #endif
 
 gchar           *dnf_realpath                       (const gchar            *path);
+void             dnf_split_releasever               (const gchar            *releasever, 
+                                                     gchar                  **releasever_major,
+                                                     gchar                  **releasever_minor);
 gboolean         dnf_remove_recursive               (const gchar            *directory,
                                                      GError                 **error);
 gboolean         dnf_ensure_file_unlinked           (const gchar            *src_path,

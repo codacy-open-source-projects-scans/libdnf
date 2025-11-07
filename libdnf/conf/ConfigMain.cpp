@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #include "ConfigMain.hpp"
@@ -284,6 +284,7 @@ class ConfigMain::Impl {
     OptionString comment{nullptr};
     OptionBool downloadonly{false}; // runtime only option
     OptionBool ignorearch{false};
+    OptionEnum<std::string> persistence{"auto", {"auto", "persist", "transient"}};
     OptionString module_platform_id{nullptr};
     OptionBool module_stream_switch{false};
     OptionBool module_obsoletes{false};
@@ -291,6 +292,8 @@ class ConfigMain::Impl {
     OptionString user_agent{getUserAgent()};
     OptionBool countme{false};
     OptionBool protect_running_kernel{true};
+
+    OptionStringList usr_drift_protected_paths{resolveGlobs("glob:/etc/dnf/usr-drift-protected-paths.d/*.conf")};
 
     // Repo main config
 
@@ -458,6 +461,13 @@ ConfigMain::Impl::Impl(Config & owner)
     owner.optBinds().add("user_agent", user_agent);
     owner.optBinds().add("countme", countme);
     owner.optBinds().add("protect_running_kernel", protect_running_kernel);
+    owner.optBinds().add("persistence", persistence);
+    owner.optBinds().add("usr_drift_protected_paths", usr_drift_protected_paths,
+        [&](Option::Priority priority, const std::string & value){
+            if (priority >= usr_drift_protected_paths.getPriority())
+                usr_drift_protected_paths.set(priority, resolveGlobs(value));
+        }, nullptr, false
+    );
 
     // Repo main config
 
@@ -504,11 +514,11 @@ ConfigMain::Impl::Impl(Config & owner)
     owner.optBinds().add("proxy_username", proxy_username);
     owner.optBinds().add("proxy_password", proxy_password);
     owner.optBinds().add("proxy_auth_method", proxy_auth_method);
+
     owner.optBinds().add("protected_packages", protected_packages,
         [&](Option::Priority priority, const std::string & value){
-            if (priority >= protected_packages.getPriority())
-                protected_packages.set(priority, resolveGlobs(value));
-        }, nullptr, false
+            optionTListAppend(protected_packages, priority, resolveGlobs(value));
+        }, nullptr, true
     );
 
     owner.optBinds().add("username", username);
@@ -613,6 +623,8 @@ OptionPath & ConfigMain::destdir() { return pImpl->destdir; }
 OptionString & ConfigMain::comment() { return pImpl->comment; }
 OptionBool & ConfigMain::downloadonly() { return pImpl->downloadonly; }
 OptionBool & ConfigMain::ignorearch() { return pImpl->ignorearch; }
+OptionEnum<std::string> & ConfigMain::persistence() { return pImpl->persistence; }
+OptionStringList & ConfigMain::usr_drift_protected_paths() { return pImpl->usr_drift_protected_paths; }
 
 OptionString & ConfigMain::module_platform_id() { return pImpl->module_platform_id; }
 OptionBool & ConfigMain::module_stream_switch() { return pImpl->module_stream_switch; }

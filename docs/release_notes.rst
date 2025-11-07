@@ -8,16 +8,90 @@
   ANY WARRANTY expressed or implied, including the implied warranties of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
   Public License for more details.  You should have received a copy of the
-  GNU General Public License along with this program; if not, write to the
-  Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-  02110-1301, USA.  Any Red Hat trademarks that are incorporated in the
-  source code or documentation are not subject to the GNU General Public
-  License and may only be used or replicated with the express permission of
-  Red Hat, Inc.
+  GNU General Public License along with this program; if not, see
+  <https://www.gnu.org/licenses/>.  Any Red Hat trademarks that are
+  incorporated in the source code or documentation are not subject to the GNU
+  General Public License and may only be used or replicated with the express
+  permission of Red Hat, Inc.
 
 ######################
  LIBDNF Release Notes
 ######################
+
+====================
+0.75.0 Release Notes
+====================
+
+Enhancements:
+
+- context: Support libdnf5 drop-in directories and repository overrides. This
+  allows applications using the context part of libdnf (e.g.  microdnf,
+  PackageKit) to take into account the main configuration from drop-in
+  directories and repository overrides, similar to how libdnf5 does.
+  These directories are also monitored for changes (except when using non-root
+  installroot path.)
+  This feature can be disabled at build time (ENABLE_DNF5_CONF_DROP_IN,
+  ENABLE_DNF5_CONF_REPOS_OVERRIDE CMake options).
+- context: dnf_context_set_install_root() now sets installroot also to global
+  mainConf configuration.
+- IniParser: Support glob range definition in section names
+- history database: Add "persistence" column (possible values are UNKNOWN,
+  PERSIST, or TRANSIENT).
+- conf: Add usr_drift_protected_paths configuration option which can be
+  configured by adding .conf files to the drop-in directory
+  /etc/dnf/usr-drift-protected-paths.d, similar to /etc/dnf/protected.d.
+  Distributions will be able to add paths that are known to cause problems
+  when their contents drift with respect to /usr, e.g. /etc/pam.d.
+
+Changes:
+
+- context: Save repository configuration with dnf_repo_commit() to override file.
+  Previously, repository configuration changes were written directly to the
+  original configuration file. Now they are written to the overwrite file
+  "99-config_manager.repo" for compatibility with the dnf5 config-manager.
+- config: Convert "protected_packages" to an append option
+
+Bug fixes:
+
+- Don't prepend installroot to varsdir in libdnf::dnf_context_load_vars()
+- Fix file name comparison in filesystem::createSortedFileList()
+- Stop importing subkeys to RPM >= 5.99.90 because RPM 6 handles subkeys
+  automatically.
+- Fix typos in messages in package problems dictionary
+- build: Fix searching libdnf header files when generating bindings with Swig
+- build: Don't probe for libcheck dependency if no tests are going to be built
+- spec: Consistently use CMake RPM macros
+- tests: Replace deprecated "check" macros
+- tests: Verify "fopen" return value otherwise we could crash
+
+Internal changes:
+
+- New functions filesystem::pathJoin(), filesystem::createSortedFileList(),
+  filesystem::getRealpath(), filesystem::isSubdirectory().
+- Add libdnf::MergedTransaction::listPersistences() method.
+- Always use result config.optBinds() by reference, not copy
+- Remove unused functions with a bug
+- config: Support optionTListAppend for options lacking fromString
+
+====================
+0.74.0 Release Notes
+====================
+
+- Fix a segfault in iterator of a ConfigParser section
+- Update ko.po
+- Split $releasever to $releasever_major and $releasever_minor in c api
+- copr: Add Copr build files
+- Add `persistence` config option
+- ConfigParser: make splitReleasever public
+- C API: Detect releasever_major, releasever_minor from provides
+- C API: Use releasever_{major,minor} from context instead of always splitting
+- C API: support shell-style variable substitution
+- C API: test shell-style variable expressions
+- conf: Improve granularity of ConfigParser exceptions
+- module: Warn if module config file is inaccessible
+- Enable automatic PR reviews
+- build: Increase CMake minimal version to 3.5.0
+- spec: Increase cmake minimal version to 3.5.0
 
 ====================
 0.73.4 Release Notes

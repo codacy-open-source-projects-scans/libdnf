@@ -16,8 +16,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -185,6 +185,15 @@ dnf_sack_init(DnfSack *sack)
     DnfSackPrivate *priv = GET_PRIVATE(sack);
     priv->pool = pool_create();
     pool_set_flag(priv->pool, POOL_FLAG_WHATPROVIDESWITHDISABLED, 1);
+
+    // On "foreign" systems (non-RPM, like Ubuntu), libsolv does not default
+    // disttype to RPM. Set this explicitly as DNF's purpose is handling RPMs.
+    pool_setdisttype(priv->pool, DISTTYPE_RPM);
+    // On "foreign" systems (non-RPM, like Ubuntu), libsolv turns off the
+    // implicitobsoleteusescolors flag by default.
+    // Given DNF's primary purpose is to manage RPMs on Fedora/CentOS and
+    // derivatives, enable it by default.
+    pool_set_flag(priv->pool, POOL_FLAG_IMPLICITOBSOLETEUSESCOLORS, 1);
 
     priv->running_kernel_id = -1;
     priv->running_kernel_fn = running_kernel;

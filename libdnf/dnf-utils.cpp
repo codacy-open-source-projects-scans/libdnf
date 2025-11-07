@@ -15,8 +15,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -82,6 +82,50 @@ dnf_realpath(const gchar *path)
     real = g_strdup(temp);
     free(temp);
     return real;
+}
+
+/**
+ * dnf_split_releasever:
+ * @releasever: A releasever string
+ * @releasever_major: Output string, or %NULL
+ * @releasever_minor: Output string, or %NULL
+ *
+ * Splits a releasever string into mayor and minor
+ * using the same logic as DNF 5 and as splitReleaseverTo in libzypp.
+ **/
+void
+dnf_split_releasever(const gchar *releasever, 
+                     gchar **releasever_major,
+                     gchar **releasever_minor)
+{
+    g_autofree gchar** result = NULL;
+
+    // Uses the same logic as DNF 5 and as splitReleaseverTo in libzypp
+    result = g_strsplit(releasever, ".", 2);
+
+    if(result[0] == NULL) {
+        if(releasever_major != NULL)
+            *releasever_major = g_strdup("");
+        if(releasever_minor != NULL)
+            *releasever_minor = g_strdup("");
+        return;
+    }
+    else {
+        if(releasever_major != NULL)
+            *releasever_major = result[0];
+        else
+            g_free(result[0]);
+    }
+
+    if(result[1] == NULL) {
+        if(releasever_minor != NULL)
+            *releasever_minor = g_strdup("");
+    } else {
+        if(releasever_minor != NULL)
+            *releasever_minor = result[1];
+        else
+            g_free(result[1]);
+    }
 }
 
 /**

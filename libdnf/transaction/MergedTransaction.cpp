@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #include "MergedTransaction.hpp"
@@ -95,6 +95,16 @@ MergedTransaction::listCmdlines() const
         cmdLines.push_back(t->getCmdline());
     }
     return cmdLines;
+}
+
+std::vector< TransactionPersistence >
+MergedTransaction::listPersistences() const
+{
+    std::vector< TransactionPersistence > persistences;
+    for (auto t : transactions) {
+        persistences.push_back(t->getPersistence());
+    }
+    return persistences;
 }
 
 std::vector< TransactionState >

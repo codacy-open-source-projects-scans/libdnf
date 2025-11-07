@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #ifndef LIBDNF_CONFIG_PARSER_HPP
@@ -54,6 +54,9 @@ public:
     };
     struct CantOpenFile : public Exception {
         CantOpenFile(const std::string & what) : Exception(what) {}
+    };
+    struct FileDoesNotExist : public CantOpenFile {
+        FileDoesNotExist(const std::string & what) : CantOpenFile(what) {}
     };
     struct ParsingError : public Exception {
         ParsingError(const std::string & what) : Exception(what) {}
@@ -140,6 +143,7 @@ public:
     std::string & getHeader() noexcept;
     const Container & getData() const noexcept;
     Container & getData() noexcept;
+    static std::pair<std::string, std::string> splitReleasever(const std::string & releasever);
 
 private:
     std::map<std::string, std::string> substitutions;
@@ -159,8 +163,6 @@ private:
     static std::pair<std::string, size_t> substitute_expression(const std::string & text,
         const std::map<std::string, std::string> & substitutions,
         unsigned int depth);
-
-    static std::tuple<std::string, std::string> split_releasever(const std::string & releasever);
 };
 
 inline void ConfigParser::setSubstitutions(const std::map<std::string, std::string> & substitutions)

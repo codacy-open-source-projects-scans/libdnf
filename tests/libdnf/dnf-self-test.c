@@ -15,8 +15,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 
@@ -187,6 +187,32 @@ dnf_lock_threads_func(void)
 
     g_thread_unref(one);
     g_object_unref(lock);
+}
+
+static void
+dnf_split_releasever_func(void)
+{
+    gchar *major, *minor;
+    dnf_split_releasever("1.23.45", &major, &minor);
+    g_assert_cmpstr(major, ==, "1");
+    g_assert_cmpstr(minor, ==, "23.45");
+    g_free(major);
+    g_free(minor);
+    dnf_split_releasever("6.789", &major, &minor);
+    g_assert_cmpstr(major, ==, "6");
+    g_assert_cmpstr(minor, ==, "789");
+    g_free(major);
+    g_free(minor);
+    dnf_split_releasever("10", &major, &minor);
+    g_assert_cmpstr(major, ==, "10");
+    g_assert_cmpstr(minor, ==, "");
+    g_free(major);
+    g_free(minor);
+    dnf_split_releasever("", &major, &minor);
+    g_assert_cmpstr(major, ==, "");
+    g_assert_cmpstr(minor, ==, "");
+    g_free(major);
+    g_free(minor);
 }
 
 static void
@@ -817,6 +843,7 @@ dnf_repo_loader_func(void)
     DnfState *state;
     gboolean ret;
     g_autofree gchar *repos_dir = NULL;
+    g_autofree gchar *vars_dir = NULL;
     g_autoptr(DnfContext) ctx = NULL;
     g_autoptr(DnfRepoLoader) repo_loader = NULL;
     guint metadata_expire;
@@ -824,8 +851,10 @@ dnf_repo_loader_func(void)
     /* set up local context */
     ctx = dnf_context_new();
     repos_dir = dnf_test_get_filename("yum.repos.d");
+    vars_dir = dnf_test_get_filename("vars");
     dnf_context_set_repo_dir(ctx, repos_dir);
     dnf_context_set_solv_dir(ctx, "/tmp");
+    dnf_context_set_vars_dir(ctx, (const gchar *[]){vars_dir, NULL});
     ret = dnf_context_setup(ctx, NULL, &error);
     g_assert_no_error(error);
     g_assert(ret);
@@ -881,6 +910,13 @@ dnf_repo_loader_func(void)
     g_assert_error(error, DNF_ERROR, DNF_ERROR_REPO_NOT_AVAILABLE);
     g_assert(!ret);
     g_clear_error(&error);
+
+    /* check that shell-style variable expressions are correctly expanded in repo values */
+    dnf_state_reset(state);
+    repo = dnf_repo_loader_get_repo_by_id(repo_loader, "shell-expansion", &error);
+    g_assert_no_error(error);
+    g_assert(repo != NULL);
+    g_assert_cmpstr(dnf_repo_get_description(repo), ==, "456");
 }
 
 static void
@@ -1240,6 +1276,7 @@ main(int argc, char **argv)
     g_test_add_func("/libdnf/context{cache-clean-check}", dnf_context_cache_clean_check_func);
     g_test_add_func("/libdnf/lock", dnf_lock_func);
     g_test_add_func("/libdnf/lock[threads]", dnf_lock_threads_func);
+    g_test_add_func("/libdnf/split_releasever", dnf_split_releasever_func);
     g_test_add_func("/libdnf/repo", ch_test_repo_func);
     g_test_add_func("/libdnf/repo_empty_keyfile", dnf_repo_setup_with_empty_keyfile);
     g_test_add_func("/libdnf/state", dnf_state_func);

@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 
@@ -122,7 +122,7 @@ START_TEST(test_dnf_solvfile_userdata)
     repowriter_free(writer);
     fclose(fp);
 
-    fp = fopen(new_file, "r");
+    fail_if((fp = fopen(new_file, "r")) == NULL);
     std::unique_ptr<SolvUserdata, decltype(solv_free)*> dnf_solvfile = solv_userdata_read(fp);
     fail_unless(dnf_solvfile);
     fail_unless(solv_userdata_verify(dnf_solvfile.get(), cs_computed));
@@ -162,6 +162,17 @@ END_TEST
 START_TEST(test_version_split)
 {
     Pool *pool = pool_create();
+
+    // On "foreign" systems (non-RPM, like Ubuntu), libsolv does not default
+    // disttype to RPM. Set this explicitly as DNF's purpose is handling RPMs.
+    fail_if(-1 == pool_setdisttype(pool, DISTTYPE_RPM));
+
+    // On "foreign" systems (non-RPM, like Ubuntu), libsolv turns off the
+    // implicitobsoleteusescolors flag by default.
+    // Given DNF's primary purpose is to manage RPMs on Fedora/CentOS and
+    // derivatives, enable it by default.
+    pool_set_flag(pool, POOL_FLAG_IMPLICITOBSOLETEUSESCOLORS, 1);
+
     char evr[] = "1:5.9.3-8";
     char *epoch, *version, *release;
 

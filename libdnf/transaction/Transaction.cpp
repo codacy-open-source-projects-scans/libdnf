@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #include "Transaction.hpp"
@@ -82,6 +82,7 @@ Transaction::dbSelect(int64_t pk)
         "  releasever, "
         "  user_id, "
         "  cmdline, "
+        "  persistence, "
         "  state, "
         "  comment "
         "FROM "
@@ -100,6 +101,7 @@ Transaction::dbSelect(int64_t pk)
     releasever = query.get< std::string >("releasever");
     userId = query.get< uint32_t >("user_id");
     cmdline = query.get< std::string >("cmdline");
+    persistence = static_cast<TransactionPersistence>(query.get<int>("persistence"));
     state = static_cast< TransactionState >(query.get< int >("state"));
     comment = query.get< std::string >("comment");
 }

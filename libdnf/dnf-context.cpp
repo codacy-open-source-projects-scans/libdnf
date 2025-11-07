@@ -16,8 +16,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -80,11 +80,14 @@
 #include "plugin/plugin-private.hpp"
 #include "utils/GLibLogger.hpp"
 #include "utils/os-release.hpp"
+#include "utils/utils.hpp"
 
 
 #define MAX_NATIVE_ARCHES    12
 
 #define RELEASEVER_PROV "system-release(releasever)"
+#define RELEASEVER_MAJOR_PROV "system-release(releasever_major)"
+#define RELEASEVER_MINOR_PROV "system-release(releasever_minor)"
 
 /* data taken from https://github.com/rpm-software-management/dnf/blob/master/dnf/arch.py */
 static const struct {
@@ -142,6 +145,8 @@ typedef struct
     gchar            **installonlypkgs;
     gchar            *base_arch;
     gchar            *release_ver;
+    gchar            *release_ver_major;
+    gchar            *release_ver_minor;
     gchar            *platform_module;
     gchar            *cache_dir;
     gchar            *solv_dir;
@@ -614,6 +619,42 @@ dnf_context_get_release_ver(DnfContext *context)
 {
     DnfContextPrivate *priv = GET_PRIVATE(context);
     return priv->release_ver;
+}
+
+/**
+ * dnf_context_get_release_ver_major:
+ * @context: a #DnfContext instance.
+ *
+ * Gets the release major version. Usually derived by taking the substring of releasever before the
+ * first ".", but can be overridden by the distribution.
+ *
+ * Returns: the release major version, e.g. "10"
+ *
+ * Since: 0.74.0
+ **/
+const gchar *
+dnf_context_get_release_ver_major(DnfContext *context)
+{
+    DnfContextPrivate *priv = GET_PRIVATE(context);
+    return priv->release_ver_major;
+}
+
+/**
+ * dnf_context_get_release_ver_minor:
+ * @context: a #DnfContext instance.
+ *
+ * Gets the release minor version. Usually derived by taking the substring of releasever after the
+ * first ".", but can be overridden by the distribution.
+ *
+ * Returns: the release minor version, e.g. "1"
+ *
+ * Since: 0.74.0
+ **/
+const gchar *
+dnf_context_get_release_ver_minor(DnfContext *context)
+{
+    DnfContextPrivate *priv = GET_PRIVATE(context);
+    return priv->release_ver_minor;
 }
 
 /**
@@ -1271,7 +1312,9 @@ dnf_context_set_vars_dir(DnfContext *context, const gchar * const *vars_dir)
  * @context: a #DnfContext instance.
  * @release_ver: the release version, e.g. "20"
  *
- * Sets the release version.
+ * Sets the release version. Sets the major and minor release version by splitting `release_ver` on
+ * the first ".". The derived major and minor versions can later be overridden by calling
+ *`dnf_context_set_release_ver_major` and `dnf_context_set_release_ver_minor`, respectively.
  *
  * Since: 0.1.0
  **/
@@ -1281,6 +1324,46 @@ dnf_context_set_release_ver(DnfContext *context, const gchar *release_ver)
     DnfContextPrivate *priv = GET_PRIVATE(context);
     g_free(priv->release_ver);
     priv->release_ver = g_strdup(release_ver);
+
+    g_free(priv->release_ver_major);
+    g_free(priv->release_ver_minor);
+    dnf_split_releasever(release_ver, &priv->release_ver_major, &priv->release_ver_minor);
+}
+
+/**
+ * dnf_context_set_release_ver_major:
+ * @context: a #DnfContext instance.
+ * @release_ver_major: the release major version, e.g. "10"
+ *
+ * Sets the release major version, which is usually derived by splitting releasever on the first
+ * ".". This setter does not update the value of $releasever.
+ *
+ * Since: 0.74.0
+ **/
+void
+dnf_context_set_release_ver_major(DnfContext *context, const gchar *release_ver_major)
+{
+    DnfContextPrivate *priv = GET_PRIVATE(context);
+    g_free(priv->release_ver_major);
+    priv->release_ver_major = g_strdup(release_ver_major);
+}
+
+/**
+ * dnf_context_set_release_ver_minor:
+ * @context: a #DnfContext instance.
+ * @release_ver_minor: the release minor version, e.g. "1"
+ *
+ * Sets the release minor version, which is usually derived by splitting releasever on the first
+ * ".". This setter does not update the value of $releasever.
+ *
+ * Since: 0.74.0
+ **/
+void
+dnf_context_set_release_ver_minor(DnfContext *context, const gchar *release_ver_minor)
+{
+    DnfContextPrivate *priv = GET_PRIVATE(context);
+    g_free(priv->release_ver_minor);
+    priv->release_ver_minor = g_strdup(release_ver_minor);
 }
 
 /**
@@ -1434,6 +1517,9 @@ dnf_context_set_install_root(DnfContext *context, const gchar *install_root)
     DnfContextPrivate *priv = GET_PRIVATE(context);
     g_free(priv->install_root);
     priv->install_root = g_strdup(install_root);
+
+    auto & mainConf = libdnf::getGlobalMainConfig(false);
+    mainConf.installroot().set(libdnf::Option::Priority::RUNTIME, install_root);
 }
 
 /**
@@ -1660,13 +1746,26 @@ dnf_context_set_os_release(DnfContext *context, GError **error) try
     Header hdr;
     while ((hdr = rpmdbNextIterator (mi)) != NULL) {
         const char *v = headerGetString (hdr, RPMTAG_VERSION);
+        const char *v_major = nullptr;
+        const char *v_minor = nullptr;
         rpmds ds = rpmdsNew (hdr, RPMTAG_PROVIDENAME, 0);
         while (rpmdsNext (ds) >= 0) {
-            if (strcmp (rpmdsN (ds), RELEASEVER_PROV) == 0 && rpmdsFlags (ds) == RPMSENSE_EQUAL)
+            if (strcmp (rpmdsN (ds), RELEASEVER_PROV) == 0 && rpmdsFlags (ds) == RPMSENSE_EQUAL) {
                 v = rpmdsEVR (ds);
+            } else if (strcmp (rpmdsN (ds), RELEASEVER_MAJOR_PROV) == 0 && rpmdsFlags (ds) == RPMSENSE_EQUAL) {
+                v_major = rpmdsEVR(ds);
+            } else if (strcmp (rpmdsN (ds), RELEASEVER_MINOR_PROV) == 0 && rpmdsFlags (ds) == RPMSENSE_EQUAL) {
+                v_minor = rpmdsEVR(ds);
+            }
         }
         found_in_rpmdb = TRUE;
-        dnf_context_set_release_ver (context, v);
+        dnf_context_set_release_ver(context, v);
+        if (v_major != nullptr) {
+            dnf_context_set_release_ver_major(context, v_major);
+        }
+        if (v_minor != nullptr) {
+            dnf_context_set_release_ver_minor(context, v_minor);
+        }
         rpmdsFree (ds);
         break;
     }
@@ -3832,7 +3931,7 @@ dnf_context_load_vars(DnfContext * context)
     auto priv = GET_PRIVATE(context);
     priv->vars->clear();
     for (auto dir = dnf_context_get_vars_dir(context); *dir; ++dir)
-        ConfigMain::addVarsFromDir(*priv->vars, std::string(priv->install_root) + *dir);
+        ConfigMain::addVarsFromDir(*priv->vars, *dir);
     ConfigMain::addVarsFromEnv(*priv->vars);
     priv->varsCached = true;
 }
@@ -3897,6 +3996,27 @@ dnf_main_conf_apply_setopts()
     globalSetoptsInSync = true;
 }
 
+static void
+load_from_parser(const libdnf::ConfigParser & parser, const std::string & cfgPath) {
+    const auto & cfgParserData = parser.getData();
+    auto cfgParserDataIter = cfgParserData.find("main");
+    if (cfgParserDataIter != cfgParserData.end()) {
+        auto & optBinds = globalMainConfig->optBinds();
+        const auto & cfgParserMainSect = cfgParserDataIter->second;
+        for (const auto & opt : cfgParserMainSect) {
+            auto optBindsIter = optBinds.find(opt.first);
+            if (optBindsIter != optBinds.end()) {
+                try {
+                    optBindsIter->second.newString(libdnf::Option::Priority::MAINCONFIG, opt.second);
+                } catch (const std::exception & ex) {
+                    g_warning("Config error in file \"%s\" section \"main\" key \"%s\": %s",
+                                cfgPath.c_str(), opt.first.c_str(), ex.what());
+                }
+            }
+        }
+    }
+}
+
 libdnf::ConfigMain & getGlobalMainConfig(bool canReadConfigFile)
 {
     std::lock_guard<std::mutex> guard(getGlobalMainConfigMutex);
@@ -3915,27 +4035,37 @@ libdnf::ConfigMain & getGlobalMainConfig(bool canReadConfigFile)
             }
         }
 
-        libdnf::ConfigParser parser;
         const std::string cfgPath{globalMainConfig->config_file_path().getValue()};
         try {
-            parser.read(cfgPath);
-            const auto & cfgParserData = parser.getData();
-            auto cfgParserDataIter = cfgParserData.find("main");
-            if (cfgParserDataIter != cfgParserData.end()) {
-                auto optBinds = globalMainConfig->optBinds();
-                const auto & cfgParserMainSect = cfgParserDataIter->second;
-                for (const auto & opt : cfgParserMainSect) {
-                    auto optBindsIter = optBinds.find(opt.first);
-                    if (optBindsIter != optBinds.end()) {
-                        try {
-                            optBindsIter->second.newString(libdnf::Option::Priority::MAINCONFIG, opt.second);
-                        } catch (const std::exception & ex) {
-                            g_warning("Config error in file \"%s\" section \"main\" key \"%s\": %s",
-                                      cfgPath.c_str(), opt.first.c_str(), ex.what());
-                        }
-                    }
+#ifdef DNF5_CONF_DROP_IN
+            std::string conf_dir_path{CONF_DIR};
+            std::string dist_conf_dir_path{DISTRIBUTION_CONF_DIR};
+
+            // If the main configuration file is from install_root, read drop-in directories from install_root
+            const std::string installroot_path = globalMainConfig->installroot().getValue();
+            if (installroot_path != "/") {
+                const bool from_installroot = libdnf::filesystem::isSubdirectory(installroot_path, cfgPath);
+                if (from_installroot) {
+                    conf_dir_path = libdnf::filesystem::pathJoin(installroot_path, conf_dir_path);
+                    dist_conf_dir_path = libdnf::filesystem::pathJoin(installroot_path, dist_conf_dir_path);
                 }
             }
+
+            // Loads configuration from drop-in directories
+            const auto paths = libdnf::filesystem::createSortedFileList({conf_dir_path, dist_conf_dir_path}, "*.conf");
+            for (const auto & path : paths) {
+                libdnf::ConfigParser parser;
+                parser.read(path);
+                load_from_parser(parser, path);
+            }
+#endif
+
+            // Finally, if a user configuration filename is defined or the file exists in the default location,
+            // it will be loaded.
+            libdnf::ConfigParser parser;
+            parser.read(cfgPath);
+            load_from_parser(parser, cfgPath);
+
         } catch (const libdnf::ConfigParser::CantOpenFile & ex) {
             if (configFilePath) {
                 // Only warning is logged. But error is reported to the caller during loading

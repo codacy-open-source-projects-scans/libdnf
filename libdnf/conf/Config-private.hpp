@@ -14,14 +14,15 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #ifndef _LIBDNF_CONFIG_PRIVATE_HPP
 #define _LIBDNF_CONFIG_PRIVATE_HPP
 
 #include "Option.hpp"
+#include "OptionStringList.hpp"
 
 namespace libdnf {
 
@@ -33,7 +34,7 @@ static void optionTListAppend(T & option, Option::Priority priority, const std::
         return;
     }
     auto addPriority = priority < option.getPriority() ? option.getPriority() : priority;
-    auto val = option.fromString(value);
+    auto val = OptionStringList(std::vector<std::string>{}).fromString(value);
     bool first = true;
     for (auto & item : val) {
         if (item.empty()) {

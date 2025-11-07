@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #ifndef LIBDNF_TRANSACTION_TRANSACTION_PRIVATE_HPP
@@ -42,6 +42,7 @@ public:
     void setReleasever(const std::string &value) { releasever = value; }
     void setUserId(uint32_t value) { userId = value; }
     void setCmdline(const std::string &value) { cmdline = value; }
+    void setPersistence(TransactionPersistence value) { persistence = value; }
     void setState(TransactionState value) { state = value; }
     void setComment(const std::string &value) { comment = value; }
 

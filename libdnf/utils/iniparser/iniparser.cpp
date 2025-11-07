@@ -14,17 +14,25 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #include "iniparser.hpp"
+
+#include <errno.h>
+#include <sys/stat.h>
 
 constexpr char DELIMITER = '\n';
 
 const char * IniParser::CantOpenFile::what() const noexcept
 {
     return "IniParser: Can't open file";
+}
+
+const char * IniParser::FileDoesNotExist::what() const noexcept
+{
+    return "IniParser: File does not exist";
 }
 
 const char * IniParser::MissingSectionHeader::what() const noexcept
@@ -62,11 +70,45 @@ const char * IniParser::MissingEqual::what() const noexcept
     return "IniParser: Missing '='";
 }
 
+
+namespace {
+
+// Returns the position of the first ']' character that does not define a list/range.
+std::size_t findEndOfSectionName(const std::string & str, std::size_t pos) {
+    if (pos >= str.size()) {
+        return std::string::npos;
+    }
+
+    bool range = false;
+    for (std::size_t idx = pos;; ++idx) {
+        const auto ch = str[idx];
+        if (ch == ']') {
+            if (range) {
+                range = false;
+            } else {
+                return idx;
+            }
+        } else if (ch == '[') {
+            range = true;
+        } else if (ch == '\0' || ch == '\n' || ch == '\r') {
+            return std::string::npos;
+        }
+    }
+}
+
+}  // namespace
+
+
 IniParser::IniParser(const std::string & filePath)
 : is(new std::ifstream(filePath))
 {
-    if (!(*is))
+    if (!(*is)) {
+        struct stat buffer;
+        if (stat(filePath.c_str(), &buffer) != 0 && errno == ENOENT) {
+            throw FileDoesNotExist();
+        }
         throw CantOpenFile();
+    }
     is->exceptions(std::ifstream::badbit);
     lineNumber = 0;
     lineReady = false;
@@ -148,7 +190,7 @@ IniParser::ItemType IniParser::next()
         }
 
         if (line[start] == '[') {
-            auto endSectPos = line.find("]", ++start);
+            auto endSectPos = findEndOfSectionName(line, ++start);
             if (endSectPos == line.npos)
                 throw MissingBracket(lineNumber);
             else if (endSectPos == start)

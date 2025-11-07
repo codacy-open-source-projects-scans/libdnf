@@ -14,8 +14,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #include "ConfigRepo.hpp"
@@ -145,7 +145,13 @@ ConfigRepo::Impl::Impl(Config & owner, ConfigMain & mainConfig)
     owner.optBinds().add("proxy_auth_method", proxy_auth_method);
     owner.optBinds().add("username", username);
     owner.optBinds().add("password", password);
-    owner.optBinds().add("protected_packages", protected_packages);
+
+    owner.optBinds().add("protected_packages", protected_packages,
+        [&](Option::Priority priority, const std::string & value){
+            optionTListAppend(protected_packages, priority, value);
+        }, nullptr, true
+    );
+
     owner.optBinds().add("gpgcheck", gpgcheck);
     owner.optBinds().add("repo_gpgcheck", repo_gpgcheck);
     owner.optBinds().add("enablegroups", enablegroups);

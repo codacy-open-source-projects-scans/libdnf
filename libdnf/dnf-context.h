@@ -15,8 +15,8 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ * License along with this library; if not, see
+ * <https://www.gnu.org/licenses/>.
  */
 
 #ifndef __DNF_CONTEXT_H
@@ -120,6 +120,8 @@ const gchar     *dnf_context_get_base_arch              (DnfContext     *context
 const gchar     *dnf_context_get_os_info                (DnfContext     *context);
 const gchar     *dnf_context_get_arch_info              (DnfContext     *context);
 const gchar     *dnf_context_get_release_ver            (DnfContext     *context);
+const gchar     *dnf_context_get_release_ver_major      (DnfContext     *context);
+const gchar     *dnf_context_get_release_ver_minor      (DnfContext     *context);
 const gchar     *dnf_context_get_platform_module        (DnfContext     *context);
 const gchar     *dnf_context_get_cache_dir              (DnfContext     *context);
 const gchar     *dnf_context_get_arch                   (DnfContext     *context);
@@ -164,6 +166,10 @@ void             dnf_context_set_vars_dir               (DnfContext     *context
                                                          const gchar * const *vars_dir);
 void             dnf_context_set_release_ver            (DnfContext     *context,
                                                          const gchar    *release_ver);
+void             dnf_context_set_release_ver_major      (DnfContext     *context,
+                                                         const gchar    *release_ver_major);
+void             dnf_context_set_release_ver_minor      (DnfContext     *context,
+                                                         const gchar    *release_ver_minor);
 void             dnf_context_set_platform_module        (DnfContext     *context,
                                                          const gchar    *platform_module);
 void             dnf_context_set_cache_dir              (DnfContext     *context,
