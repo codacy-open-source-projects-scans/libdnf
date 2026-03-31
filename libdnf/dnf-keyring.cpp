@@ -31,6 +31,7 @@
 
 
 #include <stdlib.h>
+#include <string.h>
 #include <glib.h>
 #include <rpm/rpmlib.h>
 #include <rpm/rpmts.h>
@@ -41,6 +42,181 @@
 #include "dnf-types.h"
 #include "dnf-keyring.h"
 #include "dnf-utils.h"
+
+/* Return a key ID as a hexadecimal string.
+ * @key: a public key
+ * Returns: A pointer to be freed, NULL on error. */
+static char *formatkeyid(rpmPubkey key) {
+    char *string = NULL;
+#ifdef RPM_HAS_KEYIDASHEX
+    string = strdup(rpmPubkeyKeyIDAsHex(key));
+#else
+    /* A fallback implementation for rpmPubkeyKeyIDAsHex() which is available
+     * since RPM 6. */
+    static const char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    pgpDigParams parameters = NULL; /* weak pointer */
+    const uint8_t *keyid = NULL;    /* weak pointer */
+
+    if (!key)
+        return NULL;
+    string = (char*)malloc(PGP_KEYID_LEN*2+1);
+    if (!string)
+        return NULL;
+    parameters = rpmPubkeyPgpDigParams(key);
+    if (!parameters) {
+        free(string);
+        return NULL;
+    }
+    keyid = pgpDigParamsSignID(parameters);
+    for (int i = 0; i < PGP_KEYID_LEN; i++) {
+        string[i*2] = table[keyid[i] >> 4];
+        string[i*2 + 1] = table[keyid[i] & 0x0f];
+    }
+    string[PGP_KEYID_LEN*2] = '\0';
+#endif
+    return string;
+}
+
+/**
+ * dnf_keyring_add_public_key_from_memory:
+ * @keyring: a #rpmKeyring instance.
+ * @filename: a public key filename.
+ * @pkt: a memory block with dearmored single OpenPGP public key packet
+ * @len: a length of the memory block
+ * @error: a #GError or %NULL.
+ *
+ * Adds a specific public key to the keyring.
+ *
+ * Returns: %TRUE for success, %FALSE otherwise
+ **/
+static gboolean
+dnf_keyring_add_public_key_from_memory(rpmKeyring keyring,
+                                       const gchar *filename,
+                                       const uint8_t *pkt,
+                                       size_t len,
+                                       GError **error) try
+{
+    gboolean ret = TRUE;
+    int rc;
+    rpmPubkey pubkey = NULL;
+    rpmPubkey *subkeys = NULL;
+    int nsubkeys = 0;
+    char *keyid = NULL;
+
+    if (pkt == NULL || len == 0) {
+        ret = FALSE;
+        g_set_error(error,
+                    DNF_ERROR,
+                    DNF_ERROR_INTERNAL_ERROR,
+                    "empty memory block passed to dnf_keyring_add_public_key_from_memory()");
+        goto out;
+    }
+
+    /* Parse the public key */
+    pubkey = rpmPubkeyNew(pkt, len);
+    if (pubkey == NULL) {
+        ret = FALSE;
+        g_set_error(error,
+                    DNF_ERROR,
+                    DNF_ERROR_GPG_SIGNATURE_INVALID,
+                    "failed to parse public key for %s",
+                    filename);
+        goto out;
+    }
+    keyid = formatkeyid(pubkey);
+
+    /* add to in-memory keyring */
+    rc = rpmKeyringAddKey(keyring, pubkey);
+    if (rc == 1) {
+        ret = TRUE;
+        if (keyid == NULL)
+            g_debug("a key from %s is already added", filename);
+        else
+            g_debug("0x%s key from %s is already added", keyid, filename);
+        goto out;
+    } else if (rc < 0) {
+        ret = FALSE;
+        if (keyid == NULL)
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_GPG_SIGNATURE_INVALID,
+                        "failed to add a public key from %s to rpmdb",
+                        filename);
+        else
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_GPG_SIGNATURE_INVALID,
+                        "failed to add 0x%s public key from %s to rpmdb",
+                        keyid,
+                        filename);
+        goto out;
+    }
+    if (keyid == NULL)
+        g_debug("added missing public key from %s to rpmdb", filename);
+    else
+        g_debug("added missing 0x%s public key from %s to rpmdb", keyid, filename);
+
+#ifndef RPM_AUTOADDS_SUBKEYS
+    /* RPM before 5.99.90 required adding subkeys explicitly.
+     * RPM >= 5.99.90 processes subkeys automatically with a primary key and
+     * fails on processing standalone subkeys in rpmKeyringAddKey(). */
+    subkeys = rpmGetSubkeys(pubkey, &nsubkeys);
+    for (int i = 0; i < nsubkeys; i++) {
+        rpmPubkey subkey = subkeys[i];
+        if (rpmKeyringAddKey(keyring, subkey) < 0) {
+            char *subkeyid = formatkeyid(subkey);
+            ret = FALSE;
+            if (keyid == NULL)
+                if (subkey == NULL)
+                    g_set_error(error,
+                                DNF_ERROR,
+                                DNF_ERROR_GPG_SIGNATURE_INVALID,
+                                "failed to add a subkey from %s to rpmdb",
+                                filename);
+                else
+                    g_set_error(error,
+                                DNF_ERROR,
+                                DNF_ERROR_GPG_SIGNATURE_INVALID,
+                                "failed to add 0x%s subkey from %s to rpmdb",
+                                subkeyid,
+                                keyid,
+                                filename);
+            else
+                if (subkeyid == NULL)
+                    g_set_error(error,
+                                DNF_ERROR,
+                                DNF_ERROR_GPG_SIGNATURE_INVALID,
+                                "failed to add a subkey for 0x%s primary key from %s to rpmdb",
+                                subkeyid,
+                                keyid,
+                                filename);
+                else
+                    g_set_error(error,
+                                DNF_ERROR,
+                                DNF_ERROR_GPG_SIGNATURE_INVALID,
+                                "failed to add 0x%s subkey for 0x%s primary key from %s to rpmdb",
+                                subkeyid,
+                                keyid,
+                                filename);
+            if (subkeyid != NULL)
+                free(subkeyid);
+            goto out;
+        }
+    }
+#endif
+out:
+    if (keyid != NULL)
+        free(keyid);
+    if (pubkey != NULL)
+        rpmPubkeyFree(pubkey);
+    if (subkeys != NULL) {
+        for (int i = 0; i < nsubkeys; i++) {
+          rpmPubkeyFree(subkeys[i]);
+        }
+        free(subkeys);
+    }
+    return ret;
+} CATCH_TO_GERROR(FALSE)
 
 /**
  * dnf_keyring_add_public_key:
@@ -60,13 +236,9 @@ dnf_keyring_add_public_key(rpmKeyring keyring,
                            GError **error) try
 {
     gboolean ret = TRUE;
-    int rc;
-    gsize len;
-    pgpArmor armor;
-    rpmPubkey pubkey = NULL;
-    rpmPubkey *subkeys = NULL;
-    int nsubkeys = 0;
+    bool importable_certificates_found = FALSE;
     uint8_t *pkt = NULL;
+    gsize len;
     g_autofree gchar *data = NULL;
 
     /* ignore symlinks and directories */
@@ -80,90 +252,84 @@ dnf_keyring_add_public_key(rpmKeyring keyring,
     if (!ret)
         goto out;
 
-    /* rip off the ASCII armor and parse it */
-    armor = pgpParsePkts(data, &pkt, &len);
-    if (armor < 0) {
-        ret = FALSE;
-        g_set_error(error,
-                    DNF_ERROR,
-                    DNF_ERROR_GPG_SIGNATURE_INVALID,
-                    "failed to parse PKI file %s",
-                    filename);
-        goto out;
-    }
+    /* Iterate over multiple ASCII-armored blocks.
+     * There is no function for it in the RPM library yet. */
+    for (
+            const gchar *block = data;
+            NULL != (block = strstr(block, "-----BEGIN PGP PUBLIC KEY BLOCK-----"));
+            free(pkt), pkt = NULL, block++) {
+        pgpArmor armor;
 
-    /* make sure it's something we can add to rpm */
-    if (armor != PGPARMOR_PUBKEY) {
-        ret = FALSE;
-        g_set_error(error,
-                    DNF_ERROR,
-                    DNF_ERROR_GPG_SIGNATURE_INVALID,
-                    "PKI file %s is not a public key",
-                    filename);
-        goto out;
-    }
-
-    /* test each one */
-    pubkey = rpmPubkeyNew(pkt, len);
-    if (pubkey == NULL) {
-        ret = FALSE;
-        g_set_error(error,
-                    DNF_ERROR,
-                    DNF_ERROR_GPG_SIGNATURE_INVALID,
-                    "failed to parse public key for %s",
-                    filename);
-        goto out;
-    }
-
-    /* add to in-memory keyring */
-    rc = rpmKeyringAddKey(keyring, pubkey);
-    if (rc == 1) {
-        ret = TRUE;
-        g_debug("%s is already added", filename);
-        goto out;
-    } else if (rc < 0) {
-        ret = FALSE;
-        g_set_error(error,
-                    DNF_ERROR,
-                    DNF_ERROR_GPG_SIGNATURE_INVALID,
-                    "failed to add public key %s to rpmdb",
-                    filename);
-        goto out;
-    }
-
-#ifndef RPM_AUTOADDS_SUBKEYS
-    /* RPM before 5.99.90 required adding subkeys explicitly.
-     * RPM >= 5.99.90 processes subkeys automatically with a primary key and
-     * fails on processing standalone subkeys in rpmKeyringAddKey(). */
-    subkeys = rpmGetSubkeys(pubkey, &nsubkeys);
-    for (int i = 0; i < nsubkeys; i++) {
-        rpmPubkey subkey = subkeys[i];
-        if (rpmKeyringAddKey(keyring, subkey) < 0) {
+        /* rip off the ASCII armor and parse it */
+        armor = pgpParsePkts(block, &pkt, &len);
+        if (armor < 0) {
             ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_GPG_SIGNATURE_INVALID,
-                        "failed to add subkeys for %s to rpmdb",
-                        filename);
-            goto out;
+            if (error && !*error) {
+                g_set_error(error,
+                            DNF_ERROR,
+                            DNF_ERROR_GPG_SIGNATURE_INVALID,
+                            "failed to parse PKI file %s",
+                            filename);
+            }
+            continue;
+        }
+
+        /* make sure it's something we can add to rpm */
+        if (armor != PGPARMOR_PUBKEY) {
+            ret = FALSE;
+            if (error && !*error) {
+                g_set_error(error,
+                            DNF_ERROR,
+                            DNF_ERROR_GPG_SIGNATURE_INVALID,
+                            "PKI file %s is not a public key",
+                            filename);
+            }
+            continue;
+        }
+
+        {
+            /* Iterate over all public keys in this dearmored block */
+            uint8_t *tpkt = pkt;
+            size_t cert_len;
+            while (len > 0) {
+                    if (pgpPubKeyCertLen(tpkt, len, &cert_len))
+                        break;
+                    if (cert_len > len)
+                        break;
+
+                    if (!dnf_keyring_add_public_key_from_memory(keyring, filename, tpkt, cert_len,
+                                /* Remember first error message */
+                                error == NULL || *error != NULL ? NULL : error))
+                        ret = FALSE;
+
+                    tpkt += cert_len;
+                    len -= cert_len;
+                    importable_certificates_found = TRUE;
+            }
         }
     }
-#endif
 
-    /* success */
-    g_debug("added missing public key %s to rpmdb", filename);
-    ret = TRUE;
+    if (!ret)
+        /* Prevent overwriting error messages */
+        goto out;
+
+    if (!importable_certificates_found) {
+        ret = FALSE;
+        g_set_error(error,
+                    DNF_ERROR,
+                    DNF_ERROR_GPG_SIGNATURE_INVALID,
+                    "PKI file %s contains no valid public key",
+                    filename);
+        goto out;
+    }
+
+    if (ret) {
+        /* success */
+        g_debug("added missing public key %s to rpmdb", filename);
+    }
 out:
     if (pkt != NULL)
         free(pkt); /* yes, free() */
-    if (pubkey != NULL)
-        rpmPubkeyFree(pubkey);
-    if (subkeys != NULL) {
-        for (int i = 0; i < nsubkeys; i++) {
-          rpmPubkeyFree(subkeys[i]);
-        }
-        free(subkeys);
-    }
     return ret;
 } CATCH_TO_GERROR(FALSE)
 
